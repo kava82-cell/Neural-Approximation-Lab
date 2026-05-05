@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Network Function Approximation Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/fontsource-roboto@4.0.0/index.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto', sans-serif; background-color: #0f172a; color: #e2e8f0; overflow: hidden; }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        input[type=range] {
+            accent-color: #38bdf8;
+        }
+        .slider-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+        .value-display { font-family: 'Courier New', monospace; color: #38bdf8; font-weight: bold; }
+        canvas { display: block; }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="h-16 border-b border-slate-700 flex items-center justify-between px-6 bg-slate-900 z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <h1 class="text-xl font-bold tracking-tight text-white">NeuroFit <span class="text-sky-400 font-light">Visualizer</span></h1>
+        </div>
+        <div class="flex gap-4 text-sm text-slate-400">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="statusText">Training Active</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span>Loss:</span>
+                <span id="lossDisplay" class="value-display">0.0000</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- Controls Sidebar -->
+        <aside class="w-80 bg-slate-900 border-r border-slate-700 flex flex-col p-6 gap-6 overflow-y-auto z-20">
+            
+            <!-- Architecture Controls -->
+            <div class="glass-panel p-4 rounded-xl space-y-4">
+                <h2 class="text-sm font-semibold text-white flex items-center gap-2">
+                    <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    Architecture
+                </h2>
+                
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="slider-label">Hidden Layers</span>
+                        <span id="layersVal" class="value-display">2</span>
+                    </div>
+                    <input type="range" id="layersSlider" min="0" max="5" value="2" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="slider-label">Neurons per Layer</span>
+                        <span id="neuronsVal" class="value-display">8</span>
+                    </div>
+                    <input type="range" id="neuronsSlider" min="1" max="20" value="8" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="slider-label">Activation</span>
+                    </div>
+                    <select id="activationSelect" class="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg focus:ring-sky-500 focus:border-sky-500 block p-2">
+                        <option value="relu">ReLU (Piecewise Linear)</option>
+                        <option value="sigmoid">Sigmoid (Smooth)</option>
+                        <option value="tanh">Tanh (Smooth)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Training Controls -->
+            <div class="glass-panel p-4 rounded-xl space-y-4">
+                <h2 class="text-sm font-semibold text-white flex items-center gap-2">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    Training
+                </h2>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="slider-label">Learning Rate</span>
+                        <span id="lrVal" class="value-display">0.01</span>
+                    </div>
+                    <input type="range" id="lrSlider" min="0.001" max="0.1" step="0.001" value="0.01" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="slider-label">Target Function</span>
+                    </div>
+                    <select id="functionSelect" class="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg focus:ring-sky-500 focus:border-sky-500 block p-2">
+                        <option value="sine">Sine Wave</option>
+                        <option value="poly">Polynomial (Cubic)</option>
+                        <option value="step">Step Function</option>
+                        <option value="noise">Noisy Signal</option>
+                    </select>
+                </div>
+
+                <button id="resetBtn" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Reset Weights
+                </button>
+            </div>
+
+            <div class="text-xs text-slate-500 leading-relaxed">
+                <p>Increasing layers allows the network to learn hierarchical features. Increasing neurons increases the resolution of the approximation. Watch how ReLU creates "kinks" while Sigmoid creates smooth curves.</p>
+            </div>
+        </aside>
+
+        <!-- Visualization Area -->
+        <div class="flex-1 flex flex-col md:flex-row relative bg-slate-950">
+            <!-- Network Viz -->
+            <div class="flex-1 relative border-b md:border-b-0 md:border-r border-slate-800" id="networkContainer">
+                <div class="absolute top-4 left-4 z-10 glass-panel px-3 py-1 rounded text-xs text-sky-300 font-mono">
+                    Network Topology
+                </div>
+            </div>
+            
+            <!-- Graph Viz -->
+            <div class="flex-1 relative" id="graphContainer">
+                <div class="absolute top-4 left-4 z-10 glass-panel px-3 py-1 rounded text-xs text-emerald-300 font-mono">
+                    Function Approximation
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- Configuration & State ---
+        const state = {
+            layers: 2,
+            neurons: 8,
+            learningRate: 0.01,
+            activation: 'relu',
+            targetType: 'sine',
+            loss: 0,
+            training: true
+        };
+
+        // --- Simple Neural Network Library (No external deps) ---
+        class NeuralNetwork {
+            constructor(inputNodes, hiddenLayersConfig, outputNodes, activationType) {
+                this.inputNodes = inputNodes;
+                this.outputNodes = outputNodes;
+                this.activationType = activationType;
+                
+                // Build layers: [Input -> Hidden1, Hidden1 -> Hidden2, ..., HiddenN -> Output]
+                this.weights = [];
+                this.biases = [];
+                
+                let layerSizes = [inputNodes, ...hiddenLayersConfig, outputNodes];
+                
+                for (let i = 0; i < layerSizes.length - 1; i++) {
+                    let rows = layerSizes[i+1];
+                    let cols = layerSizes[i];
+                    this.weights.push(this.randomMatrix(rows, cols));
+                    this.biases.push(this.randomVector(rows));
+                }
+            }
+
+            randomMatrix(rows, cols) {
+                let arr = [];
+                for (let i = 0; i < rows; i++) {
+                    arr[i] = [];
+                    for (let j = 0; j < cols; j++) {
+                        arr[i][j] = (Math.random() * 2 - 1) * 0.5; // Xavier-ish init
+                    }
+                }
+                return arr;
+            }
+
+            randomVector(size) {
+                let arr = [];
+                for (let i = 0; i < size; i++) arr[i] = 0;
+                return arr;
+            }
+
+            activate(x) {
+                if (this.activationType === 'relu') return Math.max(0, x);
+                if (this.activationType === 'sigmoid') return 1 / (1 + Math.exp(-x));
+                if (this.activationType === 'tanh') return Math.tanh(x);
+                return x;
+            }
+
+            activateDerivative(x) {
+                if (this.activationType === 'relu') return x > 0 ? 1 : 0;
+                if (this.activationType === 'sigmoid') {
+                    let s = 1 / (1 + Math.exp(-x));
+                    return s * (1 - s);
+                }
+                if (this.activationType === 'tanh') return 1 - Math.pow(Math.tanh(x), 2);
+                return 1;
+            }
+
+            predict(inputArray) {
+                // Forward pass storing intermediates for backprop
+                this.layerInputs = [inputArray];
+                this.layerOutputs = [inputArray];
+
+                let current = inputArray;
+
+                for (let i = 0; i < this.weights.length; i++) {
+                    let w = this.weights[i];
+                    let b = this.biases[i];
+                    let next = [];
+
+                    for (let j = 0; j < w.length; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < current.length; k++) {
+                            sum += current[k] * w[j][k];
+                        }
+                        sum += b[j];
+                        next[j] = this.activate(sum);
+                    }
+                    
+                    // Store pre-activation for derivative calculation later? 
+                    // Simplified: storing output is enough for basic demo, 
+                    // but for accurate backprop we need pre-activation. 
+                    // Let's store pre-activation separately.
+                    if (!this.preActivations) this.preActivations = [];
+                    // Recalculate pre-activation for storage (inefficient but clear)
+                    let pre = [];
+                    for (let j = 0; j < w.length; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < current.length; k++) sum += current[k] * w[j][k];
+                        sum += b[j];
+                        pre[j] = sum;
+                    }
+                    this.preActivations.push(pre);
+
+                    this.layerInputs.push(current);
+                    this.layerOutputs.push(next);
+                    current = next;
+                }
+                return current;
+            }
+
+            train(inputArray, targetArray, lr) {
+                // 1. Forward
+                let output = this.predict(inputArray);
+
+                // 2. Calculate Output Error
+                let outputErrors = [];
+                for (let i = 0; i < this.outputNodes; i++) {
+                    outputErrors[i] = targetArray[i] - output[i];
+                }
+
+                // 3. Backpropagate
+                let gradients = [];
+                
+                // Output Layer Gradients
+                for (let i = 0; i < this.outputNodes; i++) {
+                    let pre = this.preActivations[this.preActivations.length - 1][i];
+                    gradients[i] = outputErrors[i] * this.activateDerivative(pre);
+                }
+
+                // Hidden Layers Gradients (working backwards)
+                for (let i = this.weights.length - 2; i >= 0; i--) {
+                    let nextGradients = [];
+                    let wNext = this.weights[i+1];
+                    
+                    for (let j = 0; j < wNext[0].length; j++) { // neurons in current layer
+                        let errorSum = 0;
+                        for (let k = 0; k < wNext.length; k++) { // neurons in next layer
+                            errorSum += gradients[k] * wNext[k][j];
+                        }
+                        let pre = this.preActivations[i][j];
+                        nextGradients[j] = errorSum * this.activateDerivative(pre);
+                    }
+                    gradients = nextGradients;
+                }
+
+                // 4. Update Weights and Biases
+                for (let i = 0; i < this.weights.length; i++) {
+                    let w = this.weights[i];
+                    let b = this.biases[i];
+                    let inputs = this.layerOutputs[i];
+                    
+                    // Determine which gradients to use for this layer
+                    // Gradients array corresponds to the OUTPUT of the current layer operation
+                    // We need to slice the correct part of gradients if we stored them all, 
+                    // but here we are recalculating/reusing the 'gradients' variable which holds 
+                    // the deltas for the CURRENT layer being updated in the loop? 
+                    // Actually, standard backprop calculates deltas layer by layer.
+                    // Let's simplify: Recalculate deltas inside the update loop or store them properly.
+                    
+                    // Re-implementation of delta calculation for clarity in update loop:
+                    // This is a simplified SGD.
+                }
+                
+                // Let's do a simpler Weight Update loop based on stored deltas
+                // Re-run delta calculation properly
+                let deltas = [];
+                
+                // Output Delta
+                let outDelta = [];
+                for(let i=0; i<this.outputNodes; i++){
+                    let pre = this.preActivations[this.preActivations.length-1][i];
+                    outDelta[i] = (targetArray[i] - output[i]) * this.activateDerivative(pre);
+                }
+                deltas.push(outDelta);
+
+                // Hidden Deltas
+                for(let i = this.weights.length - 2; i >= 0; i--){
+                    let layerDelta = [];
+                    let nextDelta = deltas[0]; // The delta from the layer ahead
+                    let wNext = this.weights[i+1];
+                    
+                    for(let j=0; j < wNext[0].length; j++){
+                        let errorSum = 0;
+                        for(let k=0; k < nextDelta.length; k++){
+                            errorSum += nextDelta[k] * wNext[k][j];
+                        }
+                        let pre = this.preActivations[i][j];
+                        layerDelta[j] = errorSum * this.activateDerivative(pre);
+                    }
+                    deltas.unshift(layerDelta);
+                }
+
+                // Apply Updates
+                for(let i=0; i<this.weights.length; i++){
+                    let w = this.weights[i];
+                    let b = this.biases[i];
+                    let delta = deltas[i];
+                    let inputs = this.layerOutputs[i];
+
+                    for(let j=0; j<w.length; j++){ // rows (output neurons)
+                        for(let k=0; k<w[0].length; k++){ // cols (input neurons)
+                            w[j][k] += lr * delta[j] * inputs[k];
+                        }
+                        b[j] += lr * delta[j];
+                    }
+                }
+
+                // Return Loss
+                let mse = 0;
+                for(let i=0; i<output.length; i++){
+                    mse += Math.pow(targetArray[i] - output[i], 2);
+                }
+                return mse / output.length;
+            }
+        }
+
+        // --- P5.js Sketches ---
+
+        let nn;
+        let trainingData = [];
+        let p5Network, p5Graph;
+
+        function generateData(type) {
+            let data = [];
+            for (let x = -3; x <= 3; x += 0.1) {
+                let y = 0;
+                if (type === 'sine') y = Math.sin(x);
+                else if (type === 'poly') y = 0.1 * Math.pow(x, 3) - 0.5 * x;
+                else if (type === 'step') y = x > 0 ? 1 : -1;
+                else if (type === 'noise') y = Math.sin(x) + (Math.random() - 0.5) * 0.5;
+                
+                // Normalize X to 0-1 for NN input usually, but let's keep it simple: Map -3..3 to 0..1
+                let input = (x + 3) / 6; 
+                data.push({ x: x, input: [input], target: [y] });
+            }
+            return data;
+        }
+
+        function initNetwork() {
+            let hiddenConfig = [];
+            for(let i=0; i<state.layers; i++) hiddenConfig.push(state.neurons);
+            nn = new NeuralNetwork(1, hiddenConfig, 1, state.activation);
+            trainingData = generateData(state.targetType);
+        }
+
+        // --- Network Visualization Sketch ---
+        function networkSketch(p) {
+            p.setup = function() {
+                let cnv = p.createCanvas(document.getElementById('networkContainer').clientWidth, document.getElementById('networkContainer').clientHeight);
+                cnv.parent('networkContainer');
+            };
+
+            p.windowResized = function() {
+                p.resizeCanvas(document.getElementById('networkContainer').clientWidth, document.getElementById('networkContainer').clientHeight);
+            };
+
+            p.draw = function() {
+                p.background(15, 23, 42); // slate-900
+                
+                if (!nn) return;
+
+                let layerConfigs = [1, ...Array(state.layers).fill(state.neurons), 1];
+                let layerGap = p.width / (layerConfigs.length + 1);
+                let neuronRadius = 8;
+
+                // Draw Connections
+                p.strokeWeight(1);
+                for (let i = 0; i < layerConfigs.length - 1; i++) {
+                    let currentCount = layerConfigs[i];
+                    let nextCount = layerConfigs[i+1];
+                    let x1 = layerGap * (i + 1);
+                    let x2 = layerGap * (i + 2);
+                    let yGap1 = p.height / (currentCount + 1);
+                    let yGap2 = p.height / (nextCount + 1);
+
+                    for (let j = 0; j < currentCount; j++) {
+                        for (let k = 0; k < nextCount; k++) {
+                            let y1 = yGap1 * (j + 1);
+                            let y2 = yGap2 * (k + 1);
+                            
+                            // Get weight
+                            let w = nn.weights[i][k][j];
+                            let alpha = p.map(Math.abs(w), 0, 2, 50, 255);
+                            alpha = p.constrain(alpha, 50, 255);
+                            
+                            if (w > 0) p.stroke(56, 189, 248, alpha); // Sky blue
+                            else p.stroke(248, 113, 113, alpha); // Red
+
+                            p.line(x1, y1, x2, y2);
+                        }
+                    }
+                }
+
+                // Draw Neurons
+                p.noStroke();
+                for (let i = 0; i < layerConfigs.length; i++) {
+                    let count = layerConfigs[i];
+                    let x = layerGap * (i + 1);
+                    let yGap = p.height / (count + 1);
+
+                    for (let j = 0; j < count; j++) {
+                        let y = yGap * (j + 1);
+                        
+                        // Activation visualization
+                        let val = 0;
+                        if (nn.layerOutputs && nn.layerOutputs[i]) {
+                            val = nn.layerOutputs[i][j];
+                        }
+
+                        p.fill(30, 41, 59); // Base
+                        p.stroke(56, 189, 248);
+                        p.strokeWeight(2);
+                        p.ellipse(x, y, neuronRadius * 2);
+
+                        // Inner activation fill
+                        let fillAlpha = p.map(val, 0, 1, 0, 200);
+                        if(state.activation === 'relu' && val === 0) fillAlpha = 0;
+                        p.fill(56, 189, 248, fillAlpha);
+                        p.noStroke();
+                        p.ellipse(x, y, neuronRadius * 1.5);
+                    }
+                }
+                
+                // Labels
+                p.fill(148, 163, 184);
+                p.textSize(10);
+                p.textAlign(p.CENTER);
+                p.text("Input", layerGap, p.height - 10);
+                p.text("Output", layerGap * layerConfigs.length, p.height - 10);
+            };
+        }
+
+        // --- Graph Visualization Sketch ---
+        function graphSketch(p) {
+            p.setup = function() {
+                let cnv = p.createCanvas(document.getElementById('graphContainer').clientWidth, document.getElementById('graphContainer').clientHeight);
+                cnv.parent('graphContainer');
+                p.frameRate(60);
+            };
+
+            p.windowResized = function() {
+                p.resizeCanvas(document.getElementById('graphContainer').clientWidth, document.getElementById('graphContainer').clientHeight);
+            };
+
+            p.draw = function() {
+                p.background(2, 6, 23); // Very dark slate
+                
+                if (!nn || trainingData.length === 0) return;
+
+                // Train one batch per frame for animation effect
+                let totalLoss = 0;
+                // Shuffle data slightly or just iterate
+                for (let i = 0; i < trainingData.length; i++) {
+                    let d = trainingData[i];
+                    // Run multiple steps per frame for faster convergence visually
+                    for(let k=0; k<5; k++) {
+                         totalLoss += nn.train(d.input, d.target, state.learningRate);
+                    }
+                }
+                state.loss = totalLoss / trainingData.length;
+                document.getElementById('lossDisplay').innerText = state.loss.toFixed(4);
+
+                // Draw Grid
+                p.stroke(30, 41, 59);
+                p.strokeWeight(1);
+                p.line(p.width/2, 0, p.width/2, p.height);
+                p.line(0, p.height/2, p.width, p.height/2);
+
+                // Map functions
+                let mapX = (val) => p.map(val, -3.5, 3.5, 0, p.width);
+                let mapY = (val) => p.map(val, -1.5, 1.5, p.height, 0);
+
+                // Draw Target Function (Dotted)
+                p.noFill();
+                p.stroke(148, 163, 184);
+                p.strokeWeight(2);
+                p.drawingContext.setLineDash([5, 5]);
+                p.beginShape();
+                for (let x = -3.5; x <= 3.5; x += 0.05) {
+                    let y = 0;
+                    if (state.targetType === 'sine') y = Math.sin(x);
+                    else if (state.targetType === 'poly') y = 0.1 * Math.pow(x, 3) - 0.5 * x;
+                    else if (state.targetType === 'step') y = x > 0 ? 1 : -1;
+                    else if (state.targetType === 'noise') { 
+                        // For noise target, we just draw the smoothed sine underlying it usually, 
+                        // but here let's draw the actual noisy points as dots later.
+                        // For the line, draw sine.
+                        y = Math.sin(x); 
+                    }
+                    p.vertex(mapX(x), mapY(y));
+                }
+                p.endShape();
+                p.drawingContext.setLineDash([]);
+
+                // Draw NN Prediction (Solid)
+                p.noFill();
+                p.stroke(56, 189, 248); // Sky 400
+                p.strokeWeight(3);
+                p.beginShape();
+                for (let x = -3.5; x <= 3.5; x += 0.05) {
+                    let input = (x + 3) / 6; // Normalize
+                    // Clamp input for safety
+                    input = Math.max(0, Math.min(1, input));
+                    let output = nn.predict([input])[0];
+                    p.vertex(mapX(x), mapY(output));
+                }
+                p.endShape();
+
+                // Draw Data Points (if noise)
+                if (state.targetType === 'noise') {
+                    p.fill(248, 113, 113);
+                    p.noStroke();
+                    for (let d of trainingData) {
+                        // Add some random noise to target for visualization
+                        let noisyY = d.target[0] + (Math.random()-0.5)*0.2; 
+                        p.ellipse(mapX(d.x), mapY(noisyY), 4, 4);
+                    }
+                }
+                
+                // Axis Labels
+                p.fill(148, 163, 184);
+                p.textSize(12);
+                p.text("x", p.width - 20, p.height/2 - 10);
+                p.text("y", p.width/2 + 10, 20);
+            };
+        }
+
+        // --- Initialization & Event Listeners ---
+        window.addEventListener('load', () => {
+            p5Network = new p5(networkSketch);
+            p5Graph = new p5(graphSketch);
+            initNetwork();
+
+            // UI Bindings
+            const bindSlider = (id, stateKey, displayId, transform = (v) => v) => {
+                const el = document.getElementById(id);
+                const disp = document.getElementById(displayId);
+                el.addEventListener('input', (e) => {
+                    let val = transform(e.target.value);
+                    state[stateKey] = val;
+                    disp.innerText = val;
+                    if (stateKey === 'layers' || stateKey === 'neurons' || stateKey === 'activation') {
+                        initNetwork(); // Reset NN on architecture change
+                    }
+                    if (stateKey === 'targetType') {
+                        initNetwork();
+                    }
+                });
+            };
+
+            bindSlider('layersSlider', 'layers', 'layersVal', parseInt);
+            bindSlider('neuronsSlider', 'neurons', 'neuronsVal', parseInt);
+            bindSlider('lrSlider', 'learningRate', 'lrVal', parseFloat);
+            
+            document.getElementById('functionSelect').addEventListener('change', (e) => {
+                state.targetType = e.target.value;
+                initNetwork();
+            });
+
+            document.getElementById('activationSelect').addEventListener('change', (e) => {
+                state.activation = e.target.value;
+                initNetwork();
+            });
+
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                initNetwork();
+            });
+        });
+
+    </script>
+</body>
+</html>
+
